@@ -71,7 +71,7 @@ def find_median_string(genomes: list[str], k: int) -> list[str]:
     return medians
 
 
-def score_kmer(kmer: str, profile: Dict[str, list[float]]) -> float:
+def score_kmer_probability(kmer: str, profile: Dict[str, list[float]]) -> float:
 
     score = 1.0
     for i in range(0, len(kmer)):
@@ -87,7 +87,7 @@ def find_profile_most_probable_kmer(genome: str, profile: Dict[str, list[float]]
 
     for i in range(0, len(genome) - k + 1):
         kmer = genome[i:i+k]
-        score = score_kmer(kmer, profile)
+        score = score_kmer_probability(kmer, profile)
         if score > high_score:
             high_score = score
             most_probable_kmers = [kmer]
@@ -134,15 +134,24 @@ def compute_profile_with_pseudocounts(kmers: list[str]) -> Dict[str, list[float]
     return profile
 
 
-def score_motifs(motifs: list[str], profile: Dict[str, list[float]]) -> float:
-    return sum([score_kmer(kmer, profile) for kmer in motifs])
+def score_motifs(motifs: list[str]) -> int:
+    score = 0
+    for i in range(0, len(motifs[0])):
+        bases = { 'A': 0, 'C': 0, 'G': 0, 'T': 0 }
+        for motif in motifs:
+            bases[motif[i]] += 1
+
+        score += len(motifs) - max(bases.values())
+
+    return score
+
 
 
 def greedy_motif_search(genomes: list[str], k: int) -> list[str]:
 
     best_motifs = [ genome[0:k] for genome in genomes ]
     profile = compute_profile(best_motifs)
-    best_score = score_motifs(best_motifs, profile)
+    best_score = score_motifs(best_motifs)
 
     for i in range(0, len(genomes[0]) - k + 1):
         motifs = [ genomes[0][i:i+k] ]
@@ -151,7 +160,7 @@ def greedy_motif_search(genomes: list[str], k: int) -> list[str]:
             profile = compute_profile(motifs)
             motif = find_profile_most_probable_kmer(genome, profile, k)[0]
             motifs.append(motif)
-        score = score_motifs(motifs, profile)
+        score = score_motifs(motifs)
         if score > best_score:
             best_score = score
             best_motifs = motifs
@@ -163,7 +172,7 @@ def greedy_motif_search_with_pseudocounts(genomes: list[str], k: int) -> list[st
 
     best_motifs = [ genome[0:k] for genome in genomes ]
     profile = compute_profile_with_pseudocounts(best_motifs)
-    best_score = score_motifs(best_motifs, profile)
+    best_score = score_motifs(best_motifs)
 
     for i in range(0, len(genomes[0]) - k + 1):
         motifs = [ genomes[0][i:i+k] ]
@@ -172,7 +181,7 @@ def greedy_motif_search_with_pseudocounts(genomes: list[str], k: int) -> list[st
             profile = compute_profile_with_pseudocounts(motifs)
             motif = find_profile_most_probable_kmer(genome, profile, k)[0]
             motifs.append(motif)
-        score = score_motifs(motifs, profile)
+        score = score_motifs(motifs)
         if score > best_score:
             best_score = score
             best_motifs = motifs
@@ -201,19 +210,86 @@ def randomized_motif_search(genomes: list[str], k: int) -> list[str]:
     best_profile = compute_profile_with_pseudocounts(best_motifs)
     count = 0
     # print("Initial motifs: " + " ".join(best_motifs))
-    # print(f"Score of initial motifs {score_motifs(best_motifs, best_profile)}")
+    # print(f"Score of initial motifs {score_motifs(best_motifs)}")
     # print_profile(best_profile)
     while True:
         # print(f"Iteration {count}")
         count += 1
         motifs = find_most_probable_kmers(genomes, best_profile, k)
         profile = compute_profile_with_pseudocounts(motifs)
-        score = score_motifs(motifs, profile)
+        score = score_motifs(motifs)
         # print("New motifs: " + " ".join(motifs))
         # print(f"Score of newly generated motifs {score}")
         # print_profile(profile)
-        if score > score_motifs(best_motifs, best_profile):
+        if score < score_motifs(best_motifs):
             best_motifs = motifs
             best_profile = profile
         else:
             return best_motifs
+
+
+def generate_random(p: list[float]) -> int:
+
+    num = randint(0, 1000000000)
+    total = sum(p)
+    normalized_p = [ 1000000000 * n / total for n in p ]
+
+    pdf = 0
+    for i, n in enumerate(normalized_p):
+        pdf += n
+        if pdf > num:
+            return i
+
+
+def find_profile_random_kmer(genome: str, profile: Dict[str, list[float]], k: int) -> str:
+
+    kmer_counts = []
+
+    for i in range(0, len(genome) - k + 1):
+        kmer = genome[i:i+k]
+        score = score_kmer_probability(kmer, profile)
+        kmer_counts.append(score)
+
+    # print("Computed kmer probabilities: " + " ".join([ f"{k}" for k in kmer_counts ]))
+
+    random_index = generate_random(kmer_counts)
+    kmer = genome[random_index:random_index+k]
+    # print(f"Returning kmer {kmer} at index {random_index} of genome {genome}")
+
+    return kmer
+
+
+def gibbs_search(genomes: list[str], k: int, iterations: int) -> list[str]:
+
+    motifs = []
+    for genome in genomes:
+        index = randint(0, len(genome) - k)
+        motifs.append(genome[index:index + k])
+    best_score = score_motifs(motifs)
+    best_motifs = motifs
+    print("Initial motifs: " + " ".join(motifs))
+    print(f"Score of initial motifs {best_score}")
+    for i in range(iterations):
+        # print(f"Iteration {count}")
+        random_index = randint(0, len(genomes) - 1)
+        motifs.pop(random_index)
+        # print(f"Iteration {i}: random index: {random_index}")
+        # print("motifs: " + " ".join(motifs))
+        profile = compute_profile_with_pseudocounts(motifs)
+
+        motif = find_profile_random_kmer(genomes[random_index], profile, k)
+        motifs.insert(random_index, motif)
+        # print(f"New motif for index {random_index}: {motif}")
+        # print("motifs: " + " ".join(motifs))
+        score = score_motifs(motifs)
+        if score < best_score:
+            best_score = score
+            best_motifs = motifs
+        # print("New motifs: " + " ".join(motifs))
+        # print(f"Score of newly generated motifs {score}")
+        # print_profile(profile)
+
+    print(f"Motifs after {iterations} iterations: " + " ".join(motifs))
+    print(f"Score of final motifs {score_motifs(motifs)}")
+
+    return best_motifs

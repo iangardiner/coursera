@@ -257,12 +257,11 @@ class MotifTest(unittest.TestCase):
                 genomes = input_file.readline().strip().split(" ")
 
             best_result = []
-            best_score = 0
-            for _ in range(0, 100):
+            best_score = 1000000
+            for _ in range(0, 1000):
                 result = motif.randomized_motif_search(genomes, k)
-                profile = motif.compute_profile_with_pseudocounts(result)
-                score = motif.score_motifs(result, profile)
-                if score > best_score:
+                score = motif.score_motifs(result)
+                if score < best_score:
                     best_result = result
                     best_score = score
 
@@ -272,8 +271,7 @@ class MotifTest(unittest.TestCase):
 
             print(f"best score {best_score} achieved for {best_result}")
             print(f"profile most probable kmers are {best_result} compared to expected {expected}")
-            expected_profile = motif.compute_profile_with_pseudocounts(expected)
-            print(f"Expected score {motif.score_motifs(expected, expected_profile)}")
+            print(f"Expected score {motif.score_motifs(expected)}")
             self.assertEqual(expected, best_result)
 
 
@@ -286,15 +284,42 @@ class MotifTest(unittest.TestCase):
 
 
         best_result = []
-        best_score = 0
-        for _ in range(0, 15000):
+        best_score = 100000000
+        for _ in range(0, 1000):
             result = motif.randomized_motif_search(genomes, k)
-            profile = motif.compute_profile_with_pseudocounts(result)
-            score = motif.score_motifs(result, profile)
-            if score > best_score:
+            score = motif.score_motifs(result)
+            if score < best_score:
                 best_result = result
                 best_score = score
 
         print(f"best score {best_score} achieved for {best_result}")
         print("profile most probable kmers are " + " ".join(best_result))
 
+    def test_gibbs_search(self):
+
+        with open("GibbsSampler/inputs/input_1.txt") as input_file:
+            args = input_file.readline().strip().split(" ")
+            k = int(args[0])
+            t = int(args[1])
+            N = int(args[2])
+            genomes = []
+            for line in input_file:
+                for genome in line.strip().split(" "):
+                    genomes.append(genome)
+
+        best_result = []
+        best_score = 100000000
+        for _ in range(0, 20):
+            result = motif.gibbs_search(genomes, k, N)
+            score = motif.score_motifs(result)
+            if score < best_score:
+                best_result = result
+                best_score = score
+
+        with open(f"GibbsSampler/outputs/output_1.txt") as output_file:
+            expected = output_file.readline().strip().split(" ")
+
+        print(f"best score {best_score} achieved for {best_result}")
+        print(f"profile most probable kmers are {best_result} compared to expected {expected}")
+        print(f"Expected score {motif.score_motifs(expected)}")
+        self.assertEqual(expected, best_result)
